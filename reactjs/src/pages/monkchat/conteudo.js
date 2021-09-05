@@ -8,20 +8,39 @@ import { ChatButton, ChatInput, ChatTextArea } from '../../components/outros/inp
 
 import { useState, useRef } from 'react';
 
+import Cookies, { set } from 'js-cookie'
+
+import { useHistory } from 'react-router-dom'
+
+
+
 import Api from '../../service/api';
 const api = new Api();
 
 
+function lerUsuarioLogado(navigation) {
+    let logado = Cookies.get('usuario-logado');
+    if (logado == null)
+       navigation.push('/');
+        let usuarioLogado =  JSON.parse(logado);
+        return usuarioLogado;
+    
+}
+
+
 export default function Conteudo() {
+    const navigation = useHistory();
+    let usuarioLogado =  lerUsuarioLogado(navigation);
+    
+    const [IdAlterando, setIdAlterando] = useState(0);
     const [chat, setChat] = useState([]);
     const [sala, setSala] = useState('');
-    const [usu, setUsu] = useState('');
+    const [usu, setUsu] = useState(usuarioLogado.nm_usuario);
     const [msg, setMsg] = useState('')
 
     const loading = useRef(null);
 
-
-    const validarResposta = (resp) => {
+    const validarResposta = (resp) => { 
         //console.log(resp);
 
         if (!resp.erro)
@@ -40,14 +59,29 @@ export default function Conteudo() {
         loading.current.complete();
     }
 
-    const enviarMensagem = async () => {
+    const enviarMensagem = async (event) => {
+        if (!(event && event.ctrlKey && event.charCode == 13))
+        return;
+
+        if(IdAlterando > 0) {
+        const resp  = await api.alterarMensagem(IdAlterando, msg);
+        if (!validarResposta(resp))
+        return;
+
+        toast.dark('💕 Mensagem alterada com sucesso!');
+        setIdAlterando(0);
+        setMsg('');
+
+        } else {
+
         const resp = await api.inserirMensagem(sala, usu, msg);
         if (!validarResposta(resp)) 
             return;
         
-        toast.dark('💕 Mensagem enviada com sucesso!');
-        await carregarMensagens();
+        toast.dark('💕 Mensagem enviada com sucesso!');  
     }
+    await carregarMensagens();
+}
 
     const inserirUsuario = async () => {
         const resp = await api.inserirUsuario(usu);
@@ -66,6 +100,19 @@ export default function Conteudo() {
         toast.dark('💕 Sala cadastrada!');
         await carregarMensagens();
     }
+
+    const remover = async (id) => {
+        const r = await api.removerMensagem(id);
+        if (!validarResposta(r)) 
+        return;
+        toast.dark('💕 Mensagem removida!');
+        await carregarMensagens();
+    }
+
+    const editar = async (item) => {
+        setMsg(item.ds_mensagem);
+        setIdAlterando(item.id_chat);
+    }
     
     return (
         <ContainerConteudo>
@@ -79,7 +126,7 @@ export default function Conteudo() {
                     </div>
                     <div>
                         <div className="label">Nick</div>
-                        <ChatInput value={usu} onChange={e => setUsu(e.target.value)} />
+                        <ChatInput value={usu} readOnly={true} /> 
                     </div>
                     <div>
                         <ChatButton onClick={inserirSala}> Criar </ChatButton>
@@ -88,7 +135,7 @@ export default function Conteudo() {
                 </div>
                 <div className="box-mensagem">
                     <div className="label">Mensagem</div>
-                    <ChatTextArea value={msg} onChange={e => setMsg(e.target.value)} />
+                    <ChatTextArea value={msg} onChange={e => setMsg(e.target.value)} onKeyPress={enviarMensagem} />
                     <ChatButton onClick={enviarMensagem} className="btn-enviar"> Enviar </ChatButton>
                 </div>
             </div>
@@ -97,12 +144,14 @@ export default function Conteudo() {
                 
                 <img onClick={carregarMensagens}
                    className="chat-atualizar"
-                         src="/assets/images/atualizar.png" alt="" />
+                   src="/assets/images/atualizar.png" alt="" />
                 
                 <div className="chat">
                     {chat.map(x =>
                         <div key={x.id_chat}>
                             <div className="chat-message">
+                                <div> <img  onClick={() => editar(x)} src="/assets/images/editar.svg" alt="" style={{cursor: 'pointer'}} /> </div>
+                                <div> <img  onClick={() => remover(x.id_chat)} src="/assets/images/delete.svg" alt="" style={{cursor: 'pointer'}} /> </div>
                                 <div>({new Date(x.dt_mensagem.replace('Z', '')).toLocaleTimeString()})</div>
                                 <div><b>{x.tb_usuario.nm_usuario}</b> fala para <b>Todos</b>:</div>
                                 <div> {x.ds_mensagem} </div>
